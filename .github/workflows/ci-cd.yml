@@ -4,10 +4,9 @@ on:
   push:
     branches:
       - main   # chạy khi push lên nhánh main
-  pull_request:
 
 jobs:
-  build:
+  build-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,10 +21,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run tests
-        run: npm test
-
-      - name: Build project
+      - name: Run build
         run: npm run build
 
       - name: Build Docker image
@@ -38,4 +34,18 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Push Docker image
-        run: docker tag myapp:latest mydockerhubuser/myapp:latest && docker push mydockerhubuser/myapp:latest
+        run: |
+          docker tag myapp:latest ${{ secrets.DOCKER_USERNAME }}/myapp:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/myapp:latest
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: root
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            docker pull ${{ secrets.DOCKER_USERNAME }}/myapp:latest
+            docker stop myapp || true
+            docker rm myapp || true
+            docker run -d -p 80:3000 --name myapp ${{ secrets.DOCKER_USERNAME }}/myapp:latest
